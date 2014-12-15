@@ -4,9 +4,6 @@
 #include <stddef.h>
 #include <avr/pgmspace.h>
 #include <SPI.h>
-
-
-
 #include <rf.h>
 #include <SD.h>
 #include <genieArduino.h>
@@ -24,7 +21,14 @@
 
 Genie genie;
 
-
+struct HISTORICAL{
+  unsigned int date;
+  unsigned int time;
+  unsigned int temp;
+  unsigned int humidity;
+  unsigned int soil_temp;
+};
+HISTORICAL hist1;
 //SD card CS
 const int SDchipSelect = 49;
 
@@ -50,15 +54,15 @@ const int index = 0;  //HARD CODED TO READ FROM Index = 0
 unsigned int rf_command =1;
 char dataRate=0;
 void setup() {
- 
+
 
   Serial.begin(115200);
   Serial.println("starting");
   Serial1.begin(200000);  // Serial0 @ 200000 (200K) Baud
-  
+
   rf_init(dataRate); //init for WOR mode 
-  
-  genie.Begin(Serial1);   // Use Serial0 for talking to the Genie Library, and to the 4D Systems display
+
+    genie.Begin(Serial1);   // Use Serial0 for talking to the Genie Library, and to the 4D Systems display
   genie.AttachEventHandler(myGenieEventHandler); // Attach the user function Event Handler for processing events
 
   pinMode(RESETLINE, OUTPUT);  // Set D4 on Arduino to Output (4D Arduino Adaptor V2 - Display Reset)
@@ -237,13 +241,15 @@ void get_current_data(void){
 char get_historical_data(void){
   unsigned int flashChunks=0;
   Serial.println("getting historical data");
-  
+
   readSuccess=rf_wait(MAX_RETRIES); //make sure the node has woken up and sent us the first measurement 
-  delay(200);
-  
+  delay(200); //needs this because the first measurement is @ 1.2 kbps
+
   if(readSuccess){
     write_to_SD();
+    //write_history_page_1(flashChunks); //write the first reading to row 0 of page 1
     flashChunks++; 
+    
     ///switch to high baud
     dataRate=1; //higher baud for cont data transfer
     rf_init(dataRate);  
@@ -253,14 +259,15 @@ char get_historical_data(void){
       readSuccess=rf_wait(MAX_RETRIES); //rf_check_receive();
       if(readSuccess){ 
         write_to_SD();
+        write_history_page_1(flashChunks); //write the first reading to row 0 of page 1
         flashChunks++;  
         //Serial.println(flashChunks);
         //delay(200);  
         if(flashChunks ==24){
-            dataRate=0; //put it back to WOR mode 
-            rf_init(dataRate);  
-            delay(100);
-            return 1;
+          dataRate=0; //put it back to WOR mode 
+          rf_init(dataRate);  
+          delay(100);
+          return 1;
         }
       } 
     }  
@@ -271,6 +278,45 @@ char get_historical_data(void){
 }
 
 
+void write_history_page_1(int row_number){
+   
+  if(row_number ==19){
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x06, date); //DATE
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x07, time);//TIME
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x08, reply.sensor.temperature);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x09, reply.sensor.region0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0A, reply.sensor.region1);//soil temp 
+  }
+  else if(row_number ==20){
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0B, date); //DATE
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0C, time);//TIME
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0D, reply.sensor.temperature);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0E, reply.sensor.region0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0F, reply.sensor.region1);//soil temp 
+  }
+  else if(row_number ==21){
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x10, date); //DATE
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x11, time);//TIME
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x12, reply.sensor.temperature);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x13, reply.sensor.region0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x14, reply.sensor.region1);//soil temp 
+  }
+  else if(row_number ==22){
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x15, date); //DATE
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x16, time);//TIME
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x17, reply.sensor.temperature);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x18, reply.sensor.region0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x19, reply.sensor.region1);//soil temp 
+  }
+  else if(row_number ==23){
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1A, date); //DATE
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1B, time);//TIME
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1C, reply.sensor.temperature);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1D, reply.sensor.region0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1E, reply.sensor.region1);//soil temp 
+  }
+
+}
 
 
 
