@@ -58,11 +58,11 @@ void setup() {
 
   Serial.begin(115200);
   Serial.println("starting");
-  Serial1.begin(200000);  // Serial0 @ 200000 (200K) Baud
+  Serial2.begin(200000);  // Serial0 @ 200000 (200K) Baud
 
   rf_init(dataRate); //init for WOR mode 
 
-    genie.Begin(Serial1);   // Use Serial0 for talking to the Genie Library, and to the 4D Systems display
+    genie.Begin(Serial2);   // Use Serial0 for talking to the Genie Library, and to the 4D Systems display
   genie.AttachEventHandler(myGenieEventHandler); // Attach the user function Event Handler for processing events
 
   pinMode(RESETLINE, OUTPUT);  // Set D4 on Arduino to Output (4D Arduino Adaptor V2 - Display Reset)
@@ -115,6 +115,11 @@ void loop(){
   }
 }
 
+/*
+void loop(){
+  rf_read_only();
+}
+*/
 void update_ALL()
 {
   genie.DoEvents(); // Check for any Message Reports from the 4D Systems display.
@@ -318,7 +323,11 @@ void write_history_page_1(int row_number){
 
 }
 
-
+void rf_read_only(void){
+char read_result =0;
+read_result = rf_wait(MAX_RETRIES);
+delay(200);
+}
 
 
 
