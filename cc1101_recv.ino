@@ -17,18 +17,15 @@
 
 #define RESETLINE 7 
 
+#define FLASHDONE 77
+#define FLASHNOTDONE 88
+#define FLASHNUMBER 55
+#define ERASENUMBER 66
 
 
 Genie genie;
 
-struct HISTORICAL{
-  unsigned int date;
-  unsigned int time;
-  unsigned int temp;
-  unsigned int humidity;
-  unsigned int soil_temp;
-};
-HISTORICAL hist1;
+
 //SD card CS
 const int SDchipSelect = 49;
 
@@ -95,7 +92,9 @@ void setup() {
 void loop(){
   char hist_data_done;  
   update_ALL();
+  
   if(wake_sensor_button){
+    
     transmitSuccess = rf_wor_tx(node_number,rf_command);
     if((transmitSuccess &&(rf_command==1))){
       get_current_data();
@@ -205,17 +204,17 @@ void write_to_SD(void){
     myFile.print(",");
     myFile.print(reply.ID);
     myFile.print(",");
-    myFile.print(reply.sensor.temperature);
+    myFile.print(reply.sensor.val_5);
     myFile.print(",");
-    myFile.print(reply.sensor.region0);
+    myFile.print(reply.sensor.val_0);
     myFile.print(",");
-    myFile.print(reply.sensor.region1);
+    myFile.print(reply.sensor.val_1);
     myFile.print(",");
-    myFile.print(reply.sensor.region2);
+    myFile.print(reply.sensor.val_2);
     myFile.print(",");
-    myFile.print(reply.sensor.region3);
+    myFile.print(reply.sensor.val_3);
     myFile.print(",");
-    myFile.println(reply.sensor.region4);
+    myFile.println(reply.sensor.val_4);
 
     // close the file:
     myFile.close();
@@ -227,6 +226,34 @@ void write_to_SD(void){
   }
 }
 
+void write_flash_to_SD(void){
+
+  File myFile = SD.open("data.txt", FILE_WRITE);
+
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.print("Writing to test.txt...");
+    myFile.print(flash.src);
+    myFile.print(",");
+    myFile.print(flash.ID);
+    myFile.print(",");
+    for(int j=0;j<20;j++)
+    {
+      Serial.print(flash.txbuffer[j]);
+      Serial.print(",");
+      myFile.print(flash.txbuffer[j]);
+      myFile.print(",");
+    }
+     myFile.println();
+    // close the file:
+    myFile.close();
+    Serial.println("done.");
+  } 
+  else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening data.txt");
+  }
+}
 void get_current_data(void){
   Serial.println("getting current data");
   readSuccess=rf_wait(MAX_RETRIES); //rf_check_receive();
@@ -236,9 +263,9 @@ void get_current_data(void){
     wake_sensor_button =0;  
     rf_command =1; // default value for rf_commnd (just current measurements)
 
-    temperature =  reply.sensor.temperature; 
-    humidity = reply.sensor.region0; 
-    soil_temp = reply.sensor.region1;  
+    temperature =  reply.sensor.val_5; 
+    humidity = reply.sensor.val_0; 
+    soil_temp = reply.sensor.val_1;  
     write_to_SD(); 
   }
 }
@@ -247,35 +274,38 @@ char get_historical_data(void){
   unsigned int flashChunks=0;
   Serial.println("getting historical data");
 
-  readSuccess=rf_wait(MAX_RETRIES); //make sure the node has woken up and sent us the first measurement 
-  delay(200); //needs this because the first measurement is @ 1.2 kbps
+  readSuccess=rf_wait_flash(MAX_RETRIES); //make sure the node has woken up and sent us the first measurement 
+  delay(350); //needs this because the first measurement is @ 1.2 kbps
 
   if(readSuccess){
-    write_to_SD();
+    write_flash_to_SD();
     //write_history_page_1(flashChunks); //write the first reading to row 0 of page 1
     flashChunks++; 
     
     ///switch to high baud
+    Serial.println("high data rate"); 
     dataRate=1; //higher baud for cont data transfer
     rf_init(dataRate);  
     delay(100);
     /////
-    while (flashChunks<24){
-      readSuccess=rf_wait(MAX_RETRIES); //rf_check_receive();
+    while (flash.done != FLASHDONE){
+     
+      readSuccess=rf_wait_flash(MAX_RETRIES); //rf_check_receive();
       if(readSuccess){ 
-        write_to_SD();
-        write_history_page_1(flashChunks); //write the first reading to row 0 of page 1
+        //write_flash_to_SD();
+        //write_history_page_1(flashChunks); //write the first reading to row 0 of page 1
         flashChunks++;  
         //Serial.println(flashChunks);
         //delay(200);  
-        if(flashChunks ==24){
+        if(flash.done ==FLASHDONE){
           dataRate=0; //put it back to WOR mode 
           rf_init(dataRate);  
           delay(100);
           return 1;
         }
       } 
-    }  
+    //delay(10);
+  }  
 
   }
 
@@ -288,45 +318,45 @@ void write_history_page_1(int row_number){
   if(row_number ==19){
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x06, date); //DATE
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x07, time);//TIME
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x08, reply.sensor.temperature);//Temp
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x09, reply.sensor.region0); //humidity
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0A, reply.sensor.region1);//soil temp 
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x08, reply.sensor.val_5);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x09, reply.sensor.val_0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0A, reply.sensor.val_1);//soil temp 
   }
   else if(row_number ==20){
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0B, date); //DATE
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0C, time);//TIME
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0D, reply.sensor.temperature);//Temp
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0E, reply.sensor.region0); //humidity
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0F, reply.sensor.region1);//soil temp 
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0D, reply.sensor.val_5);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0E, reply.sensor.val_0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0F, reply.sensor.val_1);//soil temp 
   }
   else if(row_number ==21){
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x10, date); //DATE
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x11, time);//TIME
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x12, reply.sensor.temperature);//Temp
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x13, reply.sensor.region0); //humidity
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x14, reply.sensor.region1);//soil temp 
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x12, reply.sensor.val_5);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x13, reply.sensor.val_0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x14, reply.sensor.val_1);//soil temp 
   }
   else if(row_number ==22){
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x15, date); //DATE
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x16, time);//TIME
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x17, reply.sensor.temperature);//Temp
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x18, reply.sensor.region0); //humidity
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x19, reply.sensor.region1);//soil temp 
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x17, reply.sensor.val_5);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x18, reply.sensor.val_0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x19, reply.sensor.val_1);//soil temp 
   }
   else if(row_number ==23){
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1A, date); //DATE
   genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1B, time);//TIME
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1C, reply.sensor.temperature);//Temp
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1D, reply.sensor.region0); //humidity
-  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1E, reply.sensor.region1);//soil temp 
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1C, reply.sensor.val_5);//Temp
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1D, reply.sensor.val_0); //humidity
+  genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1E, reply.sensor.val_1);//soil temp 
   }
 
 }
 
 void rf_read_only(void){
-char read_result =0;
-read_result = rf_wait(MAX_RETRIES);
-delay(200);
+  char read_result =0;
+  read_result = rf_wait(MAX_RETRIES);
+  delay(200);
 }
 
 
