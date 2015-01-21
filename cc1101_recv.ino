@@ -246,35 +246,43 @@ unsigned int write_flash_to_SD(unsigned int previousCrc){
   int flag=0;
   crcIn = calc_crc(flash.txbuffer,20,0xffff); //Calculate CRC on-the-fly   
   Serial.print(" CRC in = "); 
-  Serial.print(crcIn);
+  Serial.print(crcIn,HEX);
   Serial.print("   Previous crc = ");
-  Serial.println(previousCrc);
+  Serial.println(previousCrc,HEX);
 
   if(crcIn != previousCrc){
     File myFile = SD.open("data.txt", FILE_WRITE);
 
     // if the file opened okay, write to it:
     if (myFile) {
-      Serial.print("Writing to test.txt...");
-      //myFile.print(flash.src);
-      //myFile.print(",");
-      //myFile.print(flash.ID);
-      //myFile.print(",");
+
       for(int j=0;j<20;j=j++)
       {
-        Serial.print(flash.txbuffer[j]);
+        Serial.print(flash.txbuffer[j],HEX);
         Serial.print(",");
 
         if((flash.txbuffer[j] ==254) &&(flash.txbuffer[j+1]==254)){
-          Serial.print("demarcate found");
+          Serial.println("demarcate found");
           myFile.println();
+          flag =1;
         }
-        else{
-          if((flash.txbuffer[j] != 255) ||(flash.txbuffer[j] != 254)){
-            myFile.print(flash.txbuffer[j]);
-            myFile.print(",");
-          }
+
+        if((flash.txbuffer[j] == 255) && (flash.txbuffer[j+1] == 255))
+        {
+          //myFile.println();
+          // close the file:
+          myFile.close();
+          Serial.println(" done.");
+          return(crcIn); 
+          break;
         }
+
+        //if((flash.txbuffer[j] !=254) &&(flash.txbuffer[j+1] !=254)){
+          if(flash.txbuffer[j]<16)myFile.print(0);
+          myFile.print(flash.txbuffer[j],HEX);
+          myFile.print(",");
+        //}
+
 
       }
       //myFile.println();
@@ -317,7 +325,10 @@ char get_historical_data(void){
     currentCrc=write_flash_to_SD(currentCrc);
     //write_history_page_1(flashChunks); //write the first reading to row 0 of page 1
     flashChunks++; 
-
+    if(flash.done == FLASHDONE)
+    {
+      return 1;
+    }
     ///switch to high baud
     Serial.println("high data rate"); 
     dataRate=1; //higher baud for cont data transfer
@@ -422,6 +433,8 @@ uint16_t crc_xmodem_update (uint16_t crc, uint8_t data)
   }
   return crc;
 }
+
+
 
 
 
