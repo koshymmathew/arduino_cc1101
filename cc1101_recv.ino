@@ -7,6 +7,7 @@
 #include <rf.h>
 #include <SD.h>
 #include <genieArduino.h>
+//#include <string.h>
 
 #define MAX_RETRIES 5
 #define csn_pin 53
@@ -21,8 +22,8 @@
 #define FLASHNOTDONE 88
 #define FLASHNUMBER 55
 #define ERASENUMBER 66
-
-
+#define MEASUREMENTS 190 //38(bytes in the line ) *5 
+#define BYTESINLINE 12
 Genie genie;
 
 
@@ -52,6 +53,8 @@ unsigned int crcIn;
 const int index = 0;  //HARD CODED TO READ FROM Index = 0
 unsigned int rf_command =1;
 char dataRate=0;
+unsigned long bytes_in_flash;
+
 void setup() {
 
 
@@ -110,6 +113,7 @@ void loop(){
         genie.WriteObject(GENIE_OBJ_WINBUTTON,0x00,0); //put STORE button back to 0
         wake_sensor_button =0;  
         rf_command =1; // default value for rf_commnd (just current measurements)
+        get_lines_from_sd(0);  
       }
     } 
 
@@ -244,6 +248,7 @@ void write_to_SD(void){
 
 unsigned int write_flash_to_SD(unsigned int previousCrc){
   int flag=0;
+
   crcIn = calc_crc(flash.txbuffer,20,0xffff); //Calculate CRC on-the-fly   
   Serial.print(" CRC in = "); 
   Serial.print(crcIn,HEX);
@@ -258,6 +263,10 @@ unsigned int write_flash_to_SD(unsigned int previousCrc){
 
       for(int j=0;j<20;j=j++)
       {
+        flag=0;
+        Serial.print("[");
+        Serial.print(j);
+        Serial.print("] ");
         Serial.print(flash.txbuffer[j],HEX);
         Serial.print(",");
 
@@ -265,30 +274,36 @@ unsigned int write_flash_to_SD(unsigned int previousCrc){
           Serial.println("demarcate found");
           myFile.println();
           flag =1;
+          j = j+1; //skip writing the 0xfe 0xfe
         }
 
         if((flash.txbuffer[j] == 255) && (flash.txbuffer[j+1] == 255))
         {
-          //myFile.println();
+          bytes_in_flash = myFile.position();
+          Serial.print("position in the file is "); 
+          Serial.println(bytes_in_flash);
           // close the file:
           myFile.close();
           Serial.println(" done.");
           return(crcIn); 
           break;
         }
-
-        //if((flash.txbuffer[j] !=254) &&(flash.txbuffer[j+1] !=254)){
+        if(!flag){
+          //if((flash.txbuffer[j] !=254) &&(flash.txbuffer[j+1] !=254)){
           if(flash.txbuffer[j]<16)myFile.print(0);
           myFile.print(flash.txbuffer[j],HEX);
           myFile.print(",");
-        //}
-
+          //}
+        }
 
       }
       //myFile.println();
+
       // close the file:
       myFile.close();
       Serial.println(" done.");
+
+
       return(crcIn);  
     } 
     else {
@@ -360,42 +375,54 @@ char get_historical_data(void){
 }
 
 
-void write_history_page_1(int row_number){
-
-  if(row_number ==19){
+void write_history_page_1(int row_number,unsigned char val[]){
+  unsigned int soil_temp;
+  date = val[1]*100 +val[2];
+  time = val[3]*100 +val[4];
+  
+  float adcTemp = (val[6]<<8) | val[7]; 
+  float temp = ((adcTemp/65536)*175.72) -46.85; 
+  float adcHumid = (val[8]<<8) | val[9] ; 
+  float humid = ((adcHumid/65536)*125) -6;
+  humidity = humid *10;
+  temperature = temp*10;
+  Serial.print(temperature);Serial.println(humidity);
+  soil_temp =(val[10]<<8) | val[11] ; 
+  
+  if(row_number ==0){
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x06, date); //DATE
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x07, time);//TIME
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x08, reply.sensor.val_5);//Temp
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x09, reply.sensor.val_0); //humidity
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0A, reply.sensor.val_1);//soil temp 
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x08, temperature);//Temp
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x09,  humidity); //humidity
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0A, soil_temp);//soil temp 
   }
-  else if(row_number ==20){
+  else if(row_number ==1){
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0B, date); //DATE
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0C, time);//TIME
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0D, reply.sensor.val_5);//Temp
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0E, reply.sensor.val_0); //humidity
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0F, reply.sensor.val_1);//soil temp 
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0D, temperature);//Temp
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0E, humidity); //humidity
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x0F, soil_temp);//soil temp 
   }
-  else if(row_number ==21){
+  else if(row_number ==2){
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x10, date); //DATE
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x11, time);//TIME
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x12, reply.sensor.val_5);//Temp
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x13, reply.sensor.val_0); //humidity
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x14, reply.sensor.val_1);//soil temp 
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x12, temperature);//Temp
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x13, humidity); //humidity
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x14, soil_temp);//soil temp 
   }
-  else if(row_number ==22){
+  else if(row_number ==3){
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x15, date); //DATE
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x16, time);//TIME
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x17, reply.sensor.val_5);//Temp
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x18, reply.sensor.val_0); //humidity
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x19, reply.sensor.val_1);//soil temp 
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x17, temperature);//Temp
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x18, humidity); //humidity
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x19, soil_temp);//soil temp 
   }
-  else if(row_number ==23){
+  else if(row_number ==4){
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1A, date); //DATE
     genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1B, time);//TIME
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1C, reply.sensor.val_5);//Temp
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1D, reply.sensor.val_0); //humidity
-    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1E, reply.sensor.val_1);//soil temp 
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1C, temperature);//Temp
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1D, humidity); //humidity
+    genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0x1E, soil_temp);//soil temp 
   }
 
 }
@@ -432,6 +459,79 @@ uint16_t crc_xmodem_update (uint16_t crc, uint8_t data)
       crc <<= 1;
   }
   return crc;
+}
+
+void get_lines_from_sd(int line_number){
+  char aChar;
+  int row=0;
+  unsigned long seek_position = bytes_in_flash -  MEASUREMENTS; //190 at the moment (38*5) 
+
+  unsigned int i=0;
+  char inData[80];
+  int data_index=0;
+  File myFile = SD.open("data.txt", FILE_READ);
+  unsigned char value[30];
+  // if the file opened okay, write to it:
+  if (myFile) {
+    myFile.seek(seek_position);
+
+    // read from the file until there's nothing else in it:
+    while (myFile.available()) {
+      aChar=myFile.read();
+
+      if(aChar == '\n')
+      {
+        int j=0;
+        for(i=0;i<BYTESINLINE;i++){
+          value[i] = get_char_value(inData[j],inData[j+1]);
+          Serial.print(value[i],HEX); 
+          Serial.print(",");
+          j+=2;
+        }
+        Serial.println();
+        write_history_page_1(row,value);
+        data_index = 0;
+        inData[data_index] = NULL; 
+        row++; 
+      }
+      else
+      {
+        if(aChar != ','){
+          //Serial.print(aChar);
+          inData[data_index] = aChar;
+          data_index++;
+          //Serial.print("data index is at"),Serial.print(data_index);
+          //inData[data_index] = '\0'; // Keep the string NULL terminated
+          //Serial.print(inData[index]); 
+        } 
+      }
+    }  
+
+
+    myFile.close();
+  } 
+  else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening data.txt");
+  }
+
+}
+
+unsigned char get_char_value(char tens,char units){
+  unsigned char high_nibble,low_nibble,value;
+  high_nibble = h2d(tens);
+  low_nibble = h2d(units);
+
+  value = (high_nibble << 4) | low_nibble;
+
+
+  return value;
+}
+
+unsigned char h2d(unsigned char hex)
+{
+  if(hex > 0x39) hex -= 7; // adjust for hex letters upper or lower case
+  return(hex & 0xf);
 }
 
 
